@@ -6,56 +6,81 @@ Description: >
 Parameters:
   FxPairParameter:
     Type: String
+    Description: Currency pair codes seperated by commas with no spaces (e.g. USDJPY,EURUSD)
     Default: USDJPY,EURUSD
   
   DataBucketParameter:
     Type: String
+    Description: S3 bucket name for fx data
     AllowedPattern: "^[a-z0-9-]+$"
     ConstraintDescription: "Only lowercase letters, numbers, and hyphens"
-    Default: fx-data-pipeline-
+    Default: fx-data-pipeline
   
   LambdaCodeBucketParameter:
     Type: String
+    Description: S3 bucket name that contains Lambda code
     Default: floydmoratti-lambda-code-bucket
   
   LambdaCodeS3KeyIngestParameter:
     Type: String
+    Description: Filename and filepath to Lambda ingest function zip file (e.g. folder_name/ingest.zip)
     Default: fx-pipeline/lambda-fx-ingest-function.zip
 
   LambdaCodeS3KeyTransformParameter:
     Type: String
+    Description: Filename and filepath to Lambda transform function zip file (e.g. folder_name/transform.zip)
     Default: fx-pipeline/lambda-fx-transform-function.zip
 
   LambdaCodeS3KeyAnalysisParameter:
     Type: String
+    Description: Filename and filepath to Lambda analysis function zip file (e.g. folder_name/analysis.zip)
     Default: fx-pipeline/lambda-fx-analysis-function.zip
 
   AthenaQueryBucketParameter:
     Type: String
+    Description: S3 bucket name for athena query results
     AllowedPattern: "^[a-z0-9-]+$"
     ConstraintDescription: "Only lowercase letters, numbers, and hyphens"
-    Default: fx-athena-results-
+    Default: fx-athena-results
   
   AthenaDatabaseParameter:
     Type: String
+    Description: Athena database name
     Default: fx_data
   
   AthenaTableParameter:
     Type: String
+    Description: Athena table name
     Default: fx_rates
 
   AthenaWorkGroupNameParameter:
     Type: String
+    Description: Athena workgroup name
     AllowedPattern: "^[A-Za-z0-9_-]{1,128}$"
     ConstraintDescription: "1-128 characters: letters (AZ, a-z), numbers (0-9), hyphens (-), and underscores (_)"
     Default: fx-data-workgroup
 
   CloudWatchNamespaceParameter:
     Type: String
+    Description: CloudWatch namespace to store fx analysis metrics
     Default: FX/Analysis
+  
+  LogRetentionDaysParameter:
+    Type: Number
+    Default: 7
+    Description: Number of days to retain CloudWatch logs
 
-  ProjectTag:
+  Environment:
     Type: String
+    Description: Deployment environment name. Allowed values = dev, prod
+    Default: prod
+    AllowedValues:
+      - dev
+      - prod
+
+  Project:
+    Type: String
+    Description: Project tag
     Default: yellow
 
 
@@ -69,8 +94,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub
-        - "${Prefix}${ShortId}"
+        - "${Prefix}-${Environment}-${ShortId}"
         - Prefix: !Ref DataBucketParameter
+          Environment: !Ref Environment
           ShortId: !Select
             - 0
             - !Split
@@ -81,15 +107,18 @@ Resources:
                   - "/"
                   - !Ref AWS::StackId
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   AthenaQueryBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub
-        - "${Prefix}${ShortId}"
+        - "${Prefix}-${Environment}-${ShortId}"
         - Prefix: !Ref AthenaQueryBucketParameter
+          Environment: !Ref Environment
           ShortId: !Select
             - 0
             - !Split
@@ -100,8 +129,10 @@ Resources:
                   - "/"
                   - !Ref AWS::StackId
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   # ----------------------
   # IAM Roles
@@ -110,7 +141,7 @@ Resources:
   EventBridgeExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: eventbridge-invoke-fx-step-functions-role
+      RoleName: !Sub "eventbridge-invoke-fx-step-functions-${Environment}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -119,7 +150,7 @@ Resources:
               Service: events.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: eventbridge-invoke-fx-step-functions-policy
+        - PolicyName: !Sub "eventbridge-invoke-fx-step-functions-${Environment}-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -130,13 +161,15 @@ Resources:
                 Resource:
                   - !GetAtt FxPipelineStateMachine.Arn
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
   
   LambdaIngestRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: lambda-fx-ingest-role
+      RoleName: !Sub "lambda-fx-ingest-${Environment}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -145,7 +178,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: lambda-fx-ingest-policy
+        - PolicyName: !Sub "lambda-fx-ingest-${Environment}-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -170,13 +203,15 @@ Resources:
                 Resource:
                   - "*"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaTransformRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: lambda-fx-transform-role
+      RoleName: !Sub "lambda-fx-transform-${Environment}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -185,7 +220,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: lambda-fx-transform-policy
+        - PolicyName: !Sub "lambda-fx-transform-${Environment}-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -210,13 +245,15 @@ Resources:
                 Resource:
                   - "*"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaAnalysisRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: lambda-fx-analysis-role
+      RoleName: !Sub "lambda-fx-analysis-${Environment}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -225,7 +262,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: lambda-fx-analysis-policy
+        - PolicyName: !Sub "lambda-fx-analysis-${Environment}-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -283,13 +320,15 @@ Resources:
                 Resource:
                   - "*"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   StepFunctionsExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: stepfunctions-fx-invoke-lambda-role
+      RoleName: !Sub "stepfunctions-fx-invoke-lambda-${Environment}-role"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -298,7 +337,7 @@ Resources:
               Service: states.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: stepfunctions-fx-invoke-lambda-policy
+        - PolicyName: !Sub "stepfunctions-fx-invoke-lambda-${Environment}-policy"
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -311,8 +350,10 @@ Resources:
                   - !GetAtt LambdaTransformAlias.AliasArn
                   - !GetAtt LambdaAnalysisAlias.AliasArn
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   # ----------------------
   # Lambda Functions
@@ -321,7 +362,7 @@ Resources:
   LambdaIngestFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: lambda-fx-ingest-function
+      FunctionName: !Sub "lambda-fx-ingest-function-${Environment}"
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaIngestRole.Arn
       Runtime: python3.11
@@ -336,8 +377,10 @@ Resources:
           CURRENCY_PAIRS: !Ref FxPairParameter
           FX_API_URL: "https://api.exchangerate.host/live"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaIngestVersion:
     Type: AWS::Lambda::Version
@@ -347,14 +390,14 @@ Resources:
   LambdaIngestAlias:
     Type: AWS::Lambda::Alias
     Properties:
-      Name: prod
+      Name: !Ref Environment
       FunctionName: !Ref LambdaIngestFunction
       FunctionVersion: !GetAtt LambdaIngestVersion.Version
 
   LambdaTransformFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: lambda-fx-transform-function
+      FunctionName: !Sub "lambda-fx-transform-function-${Environment}"
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaTransformRole.Arn
       Runtime: python3.11
@@ -368,8 +411,10 @@ Resources:
           BUCKET_NAME: !Ref FxDataBucket
           CURRENCY_PAIRS: !Ref FxPairParameter
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaTransformVersion:
     Type: AWS::Lambda::Version
@@ -379,14 +424,14 @@ Resources:
   LambdaTransformAlias:
     Type: AWS::Lambda::Alias
     Properties:
-      Name: prod
+      Name: !Ref Environment
       FunctionName: !Ref LambdaTransformFunction
       FunctionVersion: !GetAtt LambdaTransformVersion.Version
         
   LambdaAnalysisFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: lambda-fx-analysis-function
+      FunctionName: !Sub "lambda-fx-analysis-function-${Environment}"
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaAnalysisRole.Arn
       Runtime: python3.11
@@ -397,15 +442,17 @@ Resources:
         S3Key: !Ref LambdaCodeS3KeyAnalysisParameter
       Environment:
         Variables:
-          ATHENA_DATABASE: !Ref AthenaDatabaseParameter
-          ATHENA_TABLE: !Ref AthenaTableParameter
+          ATHENA_DATABASE: !Ref FxGlueDatabase
+          ATHENA_TABLE: !Ref FxRatesTable
           ATHENA_OUTPUT: !Sub "s3://${AthenaQueryBucket}/queries/"
-          ATHENA_WORKGROUP: !Ref AthenaWorkGroupNameParameter
+          ATHENA_WORKGROUP: !Ref FxAthenaWorkGroup
           CURRENCY_PAIRS: !Ref FxPairParameter
-          METRIC_NAMESPACE: !Ref CloudWatchNamespaceParameter
+          METRIC_NAMESPACE: !Sub "${CloudWatchNamespaceParameter}-${Environment}"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaAnalysisVersion:
     Type: AWS::Lambda::Version
@@ -415,7 +462,7 @@ Resources:
   LambdaAnalysisAlias:
     Type: AWS::Lambda::Alias
     Properties:
-      Name: prod
+      Name: !Ref Environment
       FunctionName: !Ref LambdaAnalysisFunction
       FunctionVersion: !GetAtt LambdaAnalysisVersion.Version
 
@@ -426,7 +473,7 @@ Resources:
   FxPipelineStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
-      StateMachineName: stepfunctions-fx-pipeline
+      StateMachineName: !Sub "stepfunctions-fx-pipeline-${Environment}"
       Definition:
         Comment: >-
           A state machine that triggers lambda functions to ingest, transform
@@ -525,8 +572,10 @@ Resources:
         Level: 'OFF'
         IncludeExecutionData: false
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   # ----------------------
   # EventBridge Schedule
@@ -535,7 +584,7 @@ Resources:
   FxPipelineSchedule:
     Type: AWS::Events::Rule
     Properties:
-      Name: fx-pipeline-schedule-rule
+      Name: !Sub "fx-pipeline-schedule-rule-${Environment}"
       ScheduleExpression: "cron(5 0 * * ? *)"
       State: ENABLED
       Targets:
@@ -543,8 +592,10 @@ Resources:
           Id: FxPipelineStateMachineTarget
           RoleArn: !GetAtt EventBridgeExecutionRole.Arn
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   # ----------------------
   # CloudWatch SNS Topic (for alerts)
@@ -553,10 +604,12 @@ Resources:
   FxPipelineAlertTopic:
     Type: AWS::SNS::Topic
     Properties:
-      TopicName: fx-data-ingestion-alerts
+      TopicName: !Sub "fx-data-ingestion-alerts-${Environment}"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   # ----------------------
   # Athena & Glue
@@ -565,22 +618,24 @@ Resources:
   FxAthenaWorkGroup:
     Type: AWS::Athena::WorkGroup
     Properties:
-      Name: !Ref AthenaWorkGroupNameParameter
+      Name: !Sub "${AthenaWorkGroupNameParameter}-${Environment}"
       State: ENABLED
       WorkGroupConfiguration:
         EnforceWorkGroupConfiguration: true
         ResultConfiguration:
           OutputLocation: !Sub "s3://${AthenaQueryBucket}/queries/"
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   FxGlueDatabase:
     Type: AWS::Glue::Database
     Properties:
       CatalogId: !Ref AWS::AccountId
       DatabaseInput:
-        Name: !Ref AthenaDatabaseParameter
+        Name: !Sub "${AthenaDatabaseParameter}-${Environment}"
         Description: FX rate data
   
   FxRatesTable:
@@ -607,7 +662,7 @@ Resources:
           storage.location.template: !Sub >
             s3://${FxDataBucket}/processed/pair=${!pair}/year=${!year}/month=${!month}/day=${!day}/
         StorageDescriptor:
-          Location: !Sub s3://${FxDataBucket}/processed
+          Location: !Sub "s3://${FxDataBucket}/processed"
           InputFormat: org.apache.hadoop.mapred.TextInputFormat
           OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
           SerdeInfo:
@@ -629,6 +684,30 @@ Resources:
           - Name: day
             Type: string
 
+
+  # ----------------------
+  # Log Groups
+  # ----------------------
+
+  LambdaIngestLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LambdaIngestFunction}"
+      RetentionInDays: !Ref LogRetentionDaysParameter
+  
+  LambdaTransformLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LambdaTransformFunction}"
+      RetentionInDays: !Ref LogRetentionDaysParameter
+
+  LambdaAnalysisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LambdaAnalysisFunction}"
+      RetentionInDays: !Ref LogRetentionDaysParameter
+
+
   # ----------------------
   # CloudWatch Alarms
   # ----------------------
@@ -636,7 +715,7 @@ Resources:
   LambdaIngestErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-ingest-errors
+      AlarmName: !Sub "fx-lambda-ingest-errors-${Environment}"
       AlarmDescription: >
         Triggers when the FX ingestion Lambda encounters at least one error
         within a 24-hour period. Indicates a failure in external API access
@@ -656,13 +735,15 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaTransformErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-transform-errors
+      AlarmName: !Sub "fx-lambda-transform-errors-${Environment}"
       AlarmDescription: >
         Triggers when the FX transform Lambda encounters at least one error
         within a 24-hour period. Indicates a failure in s3 read or write
@@ -682,13 +763,15 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaAnalysisErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-analysis-errors
+      AlarmName: !Sub "fx-lambda-analysis-errors-${Environment}"
       AlarmDescription: >
         Triggers when the FX analysis Lambda encounters at least one error
         within a 24-hour period. Indicates a failure in athena, glue or s3
@@ -708,13 +791,15 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaIngestNoInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-ingest-no-invocations
+      AlarmName: !Sub "fx-lambda-ingest-no-invocations-${Environment}"
       AlarmDescription: >
         Triggers when the FX transform Lambda records zero invocations
         over a 24-hour period. This suggests a scheduling issue.
@@ -733,13 +818,15 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaTransformNoInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-transform-no-invocations
+      AlarmName: !Sub "fx-lambda-transform-no-invocations-${Environment}"
       AlarmDescription: >
         Triggers when the FX transform Lambda records zero invocations
         over a 24-hour period. This suggests a pipeline execution failure
@@ -759,13 +846,15 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   LambdaAnalysisNoInvocationsAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-lambda-analysis-no-invocations
+      AlarmName: !Sub "fx-lambda-analysis-no-invocations-${Environment}"
       AlarmDescription: >
         Triggers when the FX analysis Lambda records zero invocations
         over a 24-hour period. This suggests a pipeline execution failure
@@ -785,18 +874,20 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
   USDJPYDeviationAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmName: fx-usdjpy-deviation-alert
+      AlarmName: !Sub "fx-usdjpy-deviation-alert-${Environment}"
       AlarmDescription: >
         Triggers when the USD/JPY exchange rate deviates by 2 percent or more
         compared to the previous trading day. This may indicate abnormal
         market movement or data quality issues.
-      Namespace: !Ref CloudWatchNamespaceParameter
+      Namespace: !Sub "${CloudWatchNamespaceParameter}-${Environment}"
       MetricName: USDJPY-Deviation
       Dimensions:
         - Name: FunctionName
@@ -811,8 +902,10 @@ Resources:
       AlarmActions:
         - !Ref FxPipelineAlertTopic
       Tags:
+        - Key: Environment
+          Value: !Ref Environment
         - Key: Project
-          Value: !Ref ProjectTag
+          Value: !Ref Project
 
 
 Outputs:
@@ -830,4 +923,6 @@ Outputs:
   AthenaQueryBucketName:
     Value: !Ref AthenaQueryBucket
   ProjectTagName:
-    Value: !Ref ProjectTag
+    Value: !Ref Project
+  EnvironmentOutput:
+    Value: !Ref Environment
