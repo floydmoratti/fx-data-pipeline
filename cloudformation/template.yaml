@@ -642,7 +642,7 @@ Resources:
     Type: AWS::Glue::Table
     Properties:
       CatalogId: !Ref AWS::AccountId
-      DatabaseName: !Ref AthenaDatabaseParameter
+      DatabaseName: !Ref FxGlueDatabase
       TableInput:
         Name: !Ref AthenaTableParameter
         TableType: EXTERNAL_TABLE
