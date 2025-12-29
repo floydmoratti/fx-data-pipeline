@@ -12,9 +12,8 @@ ATHENA_OUTPUT = os.environ["ATHENA_OUTPUT"]
 ATHENA_TABLE = os.environ["ATHENA_TABLE"]
 ATHENA_WORKGROUP = os.environ["ATHENA_WORKGROUP"]
 
-PAIR = os.environ["PAIR"]
-DEVIATION_METRIC = f"{PAIR}Deviation"
-METRIC_NAMESPACE = "FX/Analysis"
+CURRENCY_PAIRS = os.environ.get("CURRENCY_PAIRS", "USDJPY").split(",")  # convert string to a list
+METRIC_NAMESPACE = os.environ["METRIC_NAMESPACE"]
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -50,8 +49,7 @@ def is_weekend(fx_dt):
 
 
 def start_query(query):
-
-    logger.info(f"Query Info: Database={ATHENA_DATABASE}, Table={ATHENA_TABLE}, Workgroup={ATHENA_WORKGROUP}")
+    logger.info(f"Initiating query: Database={ATHENA_DATABASE}, Table={ATHENA_TABLE}, Workgroup={ATHENA_WORKGROUP}")
 
     response = athena.start_query_execution(
         QueryString=query,
@@ -84,65 +82,66 @@ def get_single_value(query_execution_id):
         QueryExecutionId=query_execution_id
     )
 
-    rows = results["ResultSet"]["Rows"]
-    # Row 0 = header, Row 1 = value
+    rows = results["ResultSet"]["Rows"]  # Row 0 = header, Row 1 = value
+    logger.info(f"Query Result = {rows}")
 
     return float(rows[1]["Data"][0]["VarCharValue"])
 
 
-def get_todays_rate(year, month, day):
-
-    logger.info("Initiating todays rate query")
+def get_todays_rate(pair, year, month, day):
+    logger.info(f"Initiating Athena query for todays rate on {pair}")
 
     query = f"""
     SELECT rate
     FROM {ATHENA_TABLE}
-    WHERE pair = '{PAIR}'
-        AND market_open = true
+    WHERE pair = '{pair}'
         AND year = '{year}'
         AND month = '{month}'
         AND day = '{day}'
     """
 
+    logger.info(f"Query = {query}")
     qid = start_query(query)
     status = wait_for_query(qid)
 
     if status != "SUCCEEDED":
-        raise Exception("Athena query for todays rate failed")
+        raise Exception(f"Athena query for todays rate on {pair} failed")
     
     return get_single_value(qid)
 
 
-def get_yesterdays_rate(year_pd, month_pd, day_pd):
-
-    logger.info("Initiating daily average query")
+def get_yesterdays_rate(pair, year_pd, month_pd, day_pd):
+    logger.info(f"Initiating Athena query for yesterdays rate on {pair}")
 
     query = f"""
     SELECT rate
     FROM {ATHENA_TABLE}
-    WHERE pair = '{PAIR}'
-        AND market_open = true
+    WHERE pair = '{pair}'
         AND year = '{year_pd}'
         AND month = '{month_pd}'
         AND day = '{day_pd}'
     """
 
+    logger.info(f"Query = {query}")
     qid = start_query(query)
     status = wait_for_query(qid)
 
     if status != "SUCCEEDED":
-        raise Exception("Athena query for daily average failed")
+        raise Exception(f"Athena query for yesterdays rate on {pair} failed")
     
     return get_single_value(qid)
 
 
-def publish_metric(deviation):
+def publish_metric(pair, deviation):
+    deviation_name = f"{pair}-Deviation"
+    logger.info(f"Publishing metric ({deviation}%) for {pair} to CloudWatch under: {deviation_name}")
+
     cloudwatch.put_metric_data(
         Namespace=METRIC_NAMESPACE,
         MetricData=[
             {
-                "MetricName": DEVIATION_METRIC,
-                "Value": deviation * 100,  # convert 0.02 → 2%
+                "MetricName": deviation_name,
+                "Value": deviation,
                 "Unit": "Percent"
             }
         ]
@@ -152,31 +151,28 @@ def publish_metric(deviation):
 # ---------- Lambda Handler ----------
 def lambda_handler(event, context):
 
-    logger.info("Received event:")
-    logger.info(json.dumps(event, indent=2, default=str))
+    logger.info("Received event: %s", json.dumps(event, indent=2, default=str))
 
     year, month, day, fx_dt = get_run_date(event)
     year_pd, month_pd, day_pd = get_yesterdays_date(fx_dt)
 
     # Guard: market closed
-    if is_weekend(fx_dt):
-        logging.info("Market closed (weekend). Skipping anomaly check.")
-        return {"status": "skipped", "reason": "weekend"}
+    # if is_weekend(fx_dt):
+    #    logging.info("Market closed (weekend). Skipping anomaly check.")
+    #    return {"status": "skipped", "reason": "weekend"}
 
-    todays_rate = get_todays_rate(year, month, day)
-    yesterdays_rate = get_yesterdays_rate(year_pd, month_pd, day_pd)
+    published_metrics = []
 
-    deviation = abs(todays_rate - yesterdays_rate) / yesterdays_rate
+    for pair in CURRENCY_PAIRS:
+        todays_rate = get_todays_rate(pair, year, month, day)
+        yesterdays_rate = get_yesterdays_rate(pair, year_pd, month_pd, day_pd)
+        deviation = (abs(todays_rate - yesterdays_rate) / yesterdays_rate) * 100  # Convert to percentage
 
-    logger.info(f"Todays rate: {todays_rate}")
-    logger.info(f"Yesterdays rate: {yesterdays_rate}")
-    logger.info(f"Deviation: {deviation}")
-
-    publish_metric(deviation)
+        logger.info(f"{pair}: Todays rate = {todays_rate}, Yesterdays rate = {yesterdays_rate}, Deviation = {deviation}%")
+        publish_metric(pair, deviation)
+        published_metrics.append({pair: deviation})
 
     return {
-        "pair": PAIR,
-        "todays_rate": todays_rate,
-        "yesterdays_rate": yesterdays_rate,
-        "deviation": deviation
+        "statusCode": 200,
+        "published_metrics": published_metrics
     }

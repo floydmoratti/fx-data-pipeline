@@ -1,21 +1,27 @@
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "WriteRawFXData",
-            "Effect": "Allow",
-            "Action": "s3:PutObject",
-            "Resource": "arn:aws:s3:::fx-data-pipeline-usd-jpy/raw/*"
-        },
-        {
-            "Sid": "CloudWatchLogging",
-            "Effect": "Allow",
-            "Action": [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-            ],
-            "Resource": "*"
-        }
-    ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Sid": "SSMGetAPIKey",
+			"Effect": "Allow",
+			"Action": "ssm:GetParameter",
+			"Resource": "arn:aws:ssm:us-east-1:687185077919:parameter/fx/api/access_key"
+		},
+		{
+			"Sid": "CloudWatchLogging",
+			"Effect": "Allow",
+			"Action": [
+				"logs:CreateLogGroup",
+				"logs:CreateLogStream",
+				"logs:PutLogEvents"
+			],
+			"Resource": "*"
+		},
+		{
+			"Sid": "WriteRawFXData",
+			"Effect": "Allow",
+			"Action": "s3:PutObject",
+			"Resource": "arn:aws:s3:::fx-data-pipeline-usd-jpy/raw/*"
+		}
+	]
 }

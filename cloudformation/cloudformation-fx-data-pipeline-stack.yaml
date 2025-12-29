@@ -6,31 +6,13 @@ Description: >
 Parameters:
   FxPairParameter:
     Type: String
-    Default: USDJPY
-
-  ProjectTag:
-    Type: String
-    Default: yellow
+    Default: USDJPY,EURUSD
   
   DataBucketParameter:
     Type: String
     AllowedPattern: "^[a-z0-9-]+$"
     ConstraintDescription: "Only lowercase letters, numbers, and hyphens"
     Default: fx-data-pipeline-
-  
-  AthenaQueryBucketParameter:
-    Type: String
-    AllowedPattern: "^[a-z0-9-]+$"
-    ConstraintDescription: "Only lowercase letters, numbers, and hyphens"
-    Default: fx-athena-results-
-  
-  AthenaDatabaseParameter:
-    Type: String
-    Default: fx_data
-  
-  AthenaTableParameter:
-    Type: String
-    Default: fx_rates
   
   LambdaCodeBucketParameter:
     Type: String
@@ -48,11 +30,33 @@ Parameters:
     Type: String
     Default: fx-pipeline/lambda-fx-analysis-function.zip
 
+  AthenaQueryBucketParameter:
+    Type: String
+    AllowedPattern: "^[a-z0-9-]+$"
+    ConstraintDescription: "Only lowercase letters, numbers, and hyphens"
+    Default: fx-athena-results-
+  
+  AthenaDatabaseParameter:
+    Type: String
+    Default: fx_data
+  
+  AthenaTableParameter:
+    Type: String
+    Default: fx_rates
+
   AthenaWorkGroupNameParameter:
     Type: String
     AllowedPattern: "^[A-Za-z0-9_-]{1,128}$"
     ConstraintDescription: "1-128 characters: letters (AZ, a-z), numbers (0-9), hyphens (-), and underscores (_)"
     Default: fx-data-workgroup
+
+  CloudWatchNamespaceParameter:
+    Type: String
+    Default: FX/Analysis
+
+  ProjectTag:
+    Type: String
+    Default: yellow
 
 
 Resources:
@@ -328,10 +332,9 @@ Resources:
         S3Key: !Ref LambdaCodeS3KeyIngestParameter
       Environment:
         Variables:
-          BASE_CURRENCY: USD
           BUCKET_NAME: !Ref FxDataBucket
+          CURRENCY_PAIRS: !Ref FxPairParameter
           FX_API_URL: "https://api.exchangerate.host/live"
-          TARGET_CURRENCIES: JPY
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
@@ -363,6 +366,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref FxDataBucket
+          CURRENCY_PAIRS: !Ref FxPairParameter
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
@@ -397,7 +401,8 @@ Resources:
           ATHENA_TABLE: !Ref AthenaTableParameter
           ATHENA_OUTPUT: !Sub "s3://${AthenaQueryBucket}/queries/"
           ATHENA_WORKGROUP: !Ref AthenaWorkGroupNameParameter
-          PAIR: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Ref FxPairParameter
+          METRIC_NAMESPACE: !Ref CloudWatchNamespaceParameter
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
@@ -442,7 +447,7 @@ Resources:
                   - Lambda.AWSLambdaException
                   - Lambda.SdkClientException
                   - States.TaskFailed
-                MaxAttempts: 3
+                MaxAttempts: 0
                 BackoffRate: 2
                 IntervalSeconds: 30
             Catch:
@@ -477,7 +482,7 @@ Resources:
                   - Lambda.SdkClientException
                   - States.TaskFailed
                 IntervalSeconds: 30
-                MaxAttempts: 3
+                MaxAttempts: 0
                 BackoffRate: 2
             Next: RunFXAnalysis
             Catch:
@@ -498,7 +503,7 @@ Resources:
                   - Lambda.AWSLambdaException
                   - Lambda.SdkClientException
                   - States.TaskFailed
-                MaxAttempts: 2
+                MaxAttempts: 0
                 BackoffRate: 2
                 IntervalSeconds: 30
             Next: Success
@@ -783,7 +788,7 @@ Resources:
         - Key: Project
           Value: !Ref ProjectTag
 
-  FxDeviationAlarm:
+  USDJPYDeviationAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: fx-usdjpy-deviation-alert
@@ -791,8 +796,8 @@ Resources:
         Triggers when the USD/JPY exchange rate deviates by 2 percent or more
         compared to the previous trading day. This may indicate abnormal
         market movement or data quality issues.
-      Namespace: FX/Analysis
-      MetricName: USDJPYDeviation
+      Namespace: !Ref CloudWatchNamespaceParameter
+      MetricName: USDJPY-Deviation
       Dimensions:
         - Name: FunctionName
           Value: !Ref LambdaAnalysisFunction
@@ -808,7 +813,6 @@ Resources:
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
-
 
 
 Outputs:
