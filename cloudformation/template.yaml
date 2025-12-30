@@ -5,7 +5,7 @@ Description: >
 
 Parameters:
   FxPairParameter:
-    Type: String
+    Type: CommaDelimitedList
     Description: Currency pair codes seperated by commas with no spaces (e.g. USDJPY,EURUSD)
     Default: USDJPY,EURUSD
   
@@ -374,7 +374,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref FxDataBucket
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
           FX_API_URL: "https://api.exchangerate.host/live"
       Tags:
         - Key: Environment
@@ -409,7 +409,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref FxDataBucket
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -446,7 +446,7 @@ Resources:
           ATHENA_TABLE: !Ref FxRatesTable
           ATHENA_OUTPUT: !Sub "s3://${AthenaQueryBucket}/queries/"
           ATHENA_WORKGROUP: !Ref FxAthenaWorkGroup
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
           METRIC_NAMESPACE: !Sub "${CloudWatchNamespaceParameter}-${Environment}"
       Tags:
         - Key: Environment
@@ -650,7 +650,7 @@ Resources:
           classification: json
           projection.enabled: "true"
           projection.pair.type: enum
-          projection.pair.values: !Ref FxPairParameter
+          projection.pair.values: !Join [",", !Ref FxPairParameter]
           projection.year.type: integer
           projection.year.range: "2020,2030"
           projection.month.type: integer
