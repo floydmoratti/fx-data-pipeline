@@ -651,12 +651,12 @@ Resources:
           projection.enabled: "true"
           projection.pair.type: enum
           projection.pair.values: !Join [",", !Ref FxPairParameter]
-          projection.year.type: string
+          projection.year.type: integer
           projection.year.range: "2020,2030"
-          projection.month.type: string
+          projection.month.type: integer
           projection.month.range: "1,12"
           projection.month.digits: "2"
-          projection.day.type: string
+          projection.day.type: integer
           projection.day.range: "1,31"
           projection.day.digits: "2"
           storage.location.template: !Sub "s3://${FxDataBucket}/processed/pair=${!pair}/year=${!year}/month=${!month}/day=${!day}/"
