@@ -5,7 +5,7 @@ Description: >
 
 Parameters:
   FxPairParameter:
-    Type: String
+    Type: CommaDelimitedList
     Description: Currency pair codes seperated by commas with no spaces (e.g. USDJPY,EURUSD)
     Default: USDJPY,EURUSD
   
@@ -146,7 +146,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principle:
+            Principal:
               Service: events.amazonaws.com
             Action: sts:AssumeRole
       Policies:
@@ -174,7 +174,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principle:
+            Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
@@ -216,7 +216,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principle:
+            Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
@@ -258,7 +258,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principle:
+            Principal:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
@@ -333,7 +333,7 @@ Resources:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principle:
+            Principal:
               Service: states.amazonaws.com
             Action: sts:AssumeRole
       Policies:
@@ -374,7 +374,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref FxDataBucket
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
           FX_API_URL: "https://api.exchangerate.host/live"
       Tags:
         - Key: Environment
@@ -409,7 +409,7 @@ Resources:
       Environment:
         Variables:
           BUCKET_NAME: !Ref FxDataBucket
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -446,7 +446,7 @@ Resources:
           ATHENA_TABLE: !Ref FxRatesTable
           ATHENA_OUTPUT: !Sub "s3://${AthenaQueryBucket}/queries/"
           ATHENA_WORKGROUP: !Ref FxAthenaWorkGroup
-          CURRENCY_PAIRS: !Ref FxPairParameter
+          CURRENCY_PAIRS: !Join [",", !Ref FxPairParameter]
           METRIC_NAMESPACE: !Sub "${CloudWatchNamespaceParameter}-${Environment}"
       Tags:
         - Key: Environment
@@ -642,7 +642,7 @@ Resources:
     Type: AWS::Glue::Table
     Properties:
       CatalogId: !Ref AWS::AccountId
-      DatabaseName: !Ref AthenaDatabaseParameter
+      DatabaseName: !Ref FxGlueDatabase
       TableInput:
         Name: !Ref AthenaTableParameter
         TableType: EXTERNAL_TABLE
@@ -650,7 +650,7 @@ Resources:
           classification: json
           projection.enabled: "true"
           projection.pair.type: enum
-          projection.pair.values: !Ref FxPairParameter
+          projection.pair.values: !Join [",", !Ref FxPairParameter]
           projection.year.type: integer
           projection.year.range: "2020,2030"
           projection.month.type: integer
@@ -659,8 +659,7 @@ Resources:
           projection.day.type: integer
           projection.day.range: "1,31"
           projection.day.digits: "2"
-          storage.location.template: !Sub >
-            s3://${FxDataBucket}/processed/pair=${!pair}/year=${!year}/month=${!month}/day=${!day}/
+          storage.location.template: !Sub "s3://${FxDataBucket}/processed/pair=${!pair}/year=${!year}/month=${!month}/day=${!day}/"
         StorageDescriptor:
           Location: !Sub "s3://${FxDataBucket}/processed"
           InputFormat: org.apache.hadoop.mapred.TextInputFormat
