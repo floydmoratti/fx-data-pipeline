@@ -85,7 +85,6 @@ def normalize_and_write(data, year, month, day, fx_dt):
         formatted_rate = format_fx_rate(rate, decimals)
 
         record = {
-            "pair": pair,
             "rate": formatted_rate,
             "date": f"{year}-{month}-{day}",
             "market_open": is_weekday(fx_dt)
